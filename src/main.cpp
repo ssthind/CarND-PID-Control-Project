@@ -74,9 +74,9 @@ int main()
           std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
           ////steering components
           std::cout << "Steer value breakdown: " << std::endl;
-          std::cout << "P: " << - pid_s.Kp * pid_s.p_error << std::endl;
-          std::cout << "D: " << - pid_s.Kd * pid_s.d_error << std::endl;
-          std::cout << "I: " << - pid_s.Ki * pid_s.i_error << std::endl;
+          std::cout << "P: " << - pid.Kp * pid.p_error << std::endl;
+          std::cout << "D: " << - pid.Kd * pid.d_error << std::endl;
+          std::cout << "I: " << - pid.Ki * pid.i_error << std::endl;
 
 
           json msgJson;
