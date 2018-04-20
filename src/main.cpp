@@ -1,9 +1,11 @@
 #include <uWS/uWS.h>
 #include <iostream>
+#include <fstream>
 #include "json.hpp"
 #include "PID.h"
 #include <math.h>
 
+using namespace std;
 // for convenience
 using json = nlohmann::json;
 
@@ -40,11 +42,20 @@ int main()
   uWS::Hub h;
 
   PID pid;
+  PID pid_throttle;
   // TODO: Initialize the pid variable.
-  pid.Init(0.1, 0.0001, 2.5);
 
-
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+ // pid.Init(0.1, 0.0005, .4);
+    //pid.Init(0.3, 0.00085, 27);
+    //pid.Init(0.3, 0.0003, 75);
+  pid.Init(0.25, 0.00003, 5);
+  pid_throttle.Init(0,0,0);
+  std::ofstream logfile;
+  int step_cnt =0 ;
+  
+  
+  
+  h.onMessage([&pid, &pid_throttle, &logfile, &step_cnt](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -59,34 +70,47 @@ int main()
           double cte = std::stod(j[1]["cte"].get<std::string>());
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
-          double steer_value;
+          double sim_throttle_value = std::stod(j[1]["throttle"].get<std::string>());
+          double steer_value, throttle_value;
           /*
           * TODO: Calcuate steering value here, remember the steering value is
           * [-1, 1].
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
+          //Steering PID CTE error update
           pid.UpdateError(cte);
-
           steer_value = pid.TotalError();
-
+          //Throttle PID error update
+          pid_throttle.UpdateError(fabs(cte));
+          throttle_value = 0.3 - pid_throttle.TotalError();
+          
+          
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
-          ////steering components
-          std::cout << "Steer value breakdown: " << std::endl;
-          std::cout << "P: " << - pid.Kp * pid.p_error << std::endl;
-          std::cout << "D: " << - pid.Kd * pid.d_error << std::endl;
-          std::cout << "I: " << - pid.Ki * pid.i_error << std::endl;
-
-
+        //writing in log file
+          if (!(logfile.is_open())){
+            logfile.open ("logfile1.txt", ios::out | ios::app);
+          }
+          logfile <<++step_cnt<<","<< pid.cumulative_err <<"," <<cte<< "," << steer_value << "," << speed << "," << throttle_value<< "," << sim_throttle_value<< "\r\n";
+          if (logfile.is_open()) logfile.close();
+          
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.1;
+          msgJson["throttle"] = throttle_value;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+            
+      // when vehicle get off road reset simulator
+          if (fabs(cte)> 10){
+            reset_simulator(ws);  
+            step_cnt =0 ;
+            pid.Init(0.25, 0.00003, 5);
+            pid_throttle.Init(0,0,0);
+          }
         }
-      } else {
+      }
+      else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
@@ -109,12 +133,15 @@ int main()
     }
   });
 
-  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
+  h.onConnection([&h, &logfile](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
+    logfile.open ("logfile1.txt", ios::out | ios::app);
+    logfile<< "step:,"<<"cumulative_err:,"<< "CTE:," <<"Steering:," <<"Speed:," <<"throttle:,"<<"sim_throttle:" << "\r\n";
   });
 
-  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code, char *message, size_t length) {
+  h.onDisconnection([&h, &logfile](uWS::WebSocket<uWS::SERVER> ws, int code, char *message, size_t length) {
     ws.close();
+	logfile.close();
     std::cout << "Disconnected" << std::endl;
   });
 
